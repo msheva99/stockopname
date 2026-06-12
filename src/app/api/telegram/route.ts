@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
 
     if (ai.action === 'query') {
       const { data, error } = await supabase.rpc('exec_readonly_sql', { query: ai.sql })
+      console.log('RPC data:', JSON.stringify(data))
+      console.log('RPC error:', JSON.stringify(error))
       if (error) {
         await sendTelegram(chatId, 'Maaf, terjadi kesalahan saat mengambil data.')
       } else {
