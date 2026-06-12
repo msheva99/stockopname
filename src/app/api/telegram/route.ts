@@ -96,9 +96,13 @@ function formatQueryResult(rows: any[]): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    console.log('Body received:', JSON.stringify(body))
     const message = body?.message
-    if (!message?.text) return NextResponse.json({ ok: true })
-
+    if (!message?.text) {
+      console.log('No message text, skipping')
+      return NextResponse.json({ ok: true })
+    }
+    
     const chatId = message.chat.id
     const telegramId = message.from.id.toString()
     const text = message.text.trim()
@@ -110,7 +114,10 @@ export async function POST(req: NextRequest) {
       .eq('is_active', true)
       .single()
 
+    console.log('User found:', JSON.stringify(user))
+
     if (!user) {
+      console.log('User not found for telegramId:', telegramId)
       await sendTelegram(chatId, 'Maaf, akun Telegram Anda belum terdaftar di sistem. Hubungi admin perusahaan.')
       return NextResponse.json({ ok: true })
     }
@@ -149,10 +156,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    await sendTelegram(chatId, 'Maaf, saya tidak mengerti permintaan Anda.')
+  await sendTelegram(chatId, 'Maaf, saya tidak mengerti permintaan Anda.')
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error(err)
+    console.error('ERROR:', err)
     return NextResponse.json({ ok: true })
   }
 }
