@@ -10,11 +10,13 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
 async function sendTelegram(chatId: string | number, text: string) {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
   })
+  const data = await res.json()
+  console.log('sendTelegram result:', JSON.stringify(data))
 }
 
 const SYSTEM_PROMPT = `Kamu adalah StokAI, asisten inventory management via Telegram.
