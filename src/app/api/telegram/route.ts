@@ -91,9 +91,12 @@ async function askOpenAI(userMessage: string, userContext: any) {
 }
 
 function formatQueryResult(rows: any[]): string {
-  if (!rows || rows.length === 0) return 'Tidak ada data ditemukan.'
-  return rows
-    .map(row => Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(' | '))
+  const flat = Array.isArray(rows?.[0]) ? rows[0] : rows
+
+  if (!flat || flat.length === 0) return 'Tidak ada data ditemukan.'
+
+  return flat
+    .map((row: any) => Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(' | '))
     .join('\n')
 }
 
