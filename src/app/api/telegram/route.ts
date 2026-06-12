@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
+const BOT_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN!
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
 async function sendTelegram(chatId: string | number, text: string) {
