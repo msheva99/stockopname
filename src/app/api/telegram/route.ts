@@ -25,20 +25,23 @@ Kamu menerima data user (role, outlet) dan pesan dari user. Balas HANYA dalam fo
 
 Format response:
 {
-  "action": "query" | "update_user" | "insert_user" | "info" | "unauthorized",
-  "sql": "SELECT ... atau UPDATE ... atau INSERT ...",
-  "reply": "pesan balasan jika action=info atau unauthorized"
+  "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "info" | "unauthorized",
+  "sql": "SELECT ... atau UPDATE ... atau INSERT ... atau DELETE ...",
+  "reply": "pesan balasan jika action=info atau unauthorized, atau konfirmasi sukses"
 }
 
 ATURAN AKSES:
 - role "staff": HANYA boleh action "query" untuk cek stok outlet sendiri (outlet_id sesuai user). Tidak boleh ubah data apapun.
-- role "owner": boleh "query" stok outlet sendiri, dan "update_user" / "insert_user" HANYA untuk staff di outlet_id miliknya sendiri (role harus 'staff').
-- role "superadmin": boleh semua, termasuk tambah/edit owner, staff, outlet, produk.
+- role "owner": boleh "query" stok outlet sendiri, "update_user"/"insert_user"/"delete_user" untuk staff di outlet sendiri, "insert_product"/"delete_product" untuk produk master, dan "update_stock" untuk stok outlet sendiri.
+- role "superadmin": boleh semua aksi tanpa batasan outlet.
 
 ATURAN SQL:
 - Tabel: users (id, name, username, pin, telegram_id, role, outlet_id, is_active), outlets (id, name, address), outlet_stock (outlet_id, product_id, current_qty, buffer_qty), products (id, name, unit, category_id), categories (id, name)
 - Untuk query stok, JOIN outlet_stock dengan products, filter outlet_id = outlet_id user (kecuali superadmin yang tanya semua outlet)
-- Untuk update_user/insert_user, SELALU sertakan WHERE outlet_id = [outlet_id milik pengirim] dan role = 'staff' untuk mencegah owner ubah data outlet lain
+- update_user/insert_user/delete_user: SELALU sertakan WHERE outlet_id = [outlet_id milik pengirim] dan role = 'staff' untuk mencegah owner ubah data outlet lain
+- update_stock: UPDATE outlet_stock SET current_qty=... WHERE outlet_id=[outlet_id pengirim] AND product_id=(SELECT id FROM products WHERE name ILIKE '%nama produk%')
+- insert_product: INSERT INTO products (name, unit, category_id) VALUES (...). Jika kategori tidak disebut, gunakan category_id=1 sebagai default.
+- delete_product: DELETE FROM products WHERE name ILIKE '%nama produk%'
 - Action "unauthorized" jika user minta sesuatu di luar izin role-nya. Isi "reply" dengan penjelasan sopan.
 - Action "info" untuk pertanyaan umum / sapaan / tidak butuh database.
 
@@ -52,11 +55,23 @@ User (owner, outlet_id=1) bilang "ganti pin staff_bsd jadi 9999":
 User (owner, outlet_id=1) bilang "tambah staff baru nama Ani username ani_bsd pin 1234":
 {"action":"insert_user","sql":"INSERT INTO users (name, username, pin, role, outlet_id, is_active) VALUES ('Ani','ani_bsd','1234','staff',1,true)","reply":"Staff Ani berhasil ditambahkan."}
 
+User (owner, outlet_id=1) bilang "hapus staff ani_bsd":
+{"action":"delete_user","sql":"DELETE FROM users WHERE username='ani_bsd' AND outlet_id=1 AND role='staff'","reply":"Staff ani_bsd berhasil dihapus."}
+
+User (owner, outlet_id=1) bilang "set stok saus bbq jadi 10":
+{"action":"update_stock","sql":"UPDATE outlet_stock SET current_qty=10 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Stok Saus BBQ diubah menjadi 10."}
+
+User (owner) bilang "tambah produk baru: Saus Sambal, satuan kg":
+{"action":"insert_product","sql":"INSERT INTO products (name, unit, category_id) VALUES ('Saus Sambal','kg',1)","reply":"Produk Saus Sambal berhasil ditambahkan ke master produk."}
+
+User (owner) bilang "hapus produk Saus Mentai":
+{"action":"delete_product","sql":"DELETE FROM products WHERE name ILIKE '%saus mentai%'","reply":"Produk Saus Mentai berhasil dihapus."}
+
 User (staff) bilang "tambah staff baru ...":
 {"action":"unauthorized","sql":"","reply":"Maaf, hanya owner atau admin yang bisa menambah staff."}
 
 User bilang "halo":
-{"action":"info","sql":"","reply":"Halo! Saya StokAI. Kamu bisa tanya stok, atau (jika owner) kelola staff outletmu."}
+{"action":"info","sql":"","reply":"Halo! Saya StokAI. Kamu bisa tanya stok, atau (jika owner) kelola staff dan produk outletmu."}
 `
 
 async function askOpenAI(userMessage: string, userContext: any) {
@@ -79,7 +94,7 @@ async function askOpenAI(userMessage: string, userContext: any) {
     }),
   })
   const data = await res.json()
-    console.log('OpenAI raw response:', JSON.stringify(data))
+  console.log('OpenAI raw response:', JSON.stringify(data))
 
   const raw = data.choices?.[0]?.message?.content || '{}'
   const clean = raw.replace(/```json|```/g, '').trim()
@@ -110,6 +125,15 @@ function formatQueryResult(rows: any[]): string {
     .join('\n\n')
 }
 
+const WRITE_ACTIONS = [
+  'update_user',
+  'insert_user',
+  'delete_user',
+  'insert_product',
+  'delete_product',
+  'update_stock',
+]
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -119,7 +143,7 @@ export async function POST(req: NextRequest) {
       console.log('No message text, skipping')
       return NextResponse.json({ ok: true })
     }
-    
+
     const chatId = message.chat.id
     const telegramId = message.from.id.toString()
     const text = message.text.trim()
@@ -147,8 +171,7 @@ export async function POST(req: NextRequest) {
     }
 
     const ai = await askOpenAI(text, userContext)
-        console.log('AI response:', JSON.stringify(ai))
-
+    console.log('AI response:', JSON.stringify(ai))
 
     if (ai.action === 'info' || ai.action === 'unauthorized') {
       await sendTelegram(chatId, ai.reply || 'Maaf, saya tidak mengerti.')
@@ -167,17 +190,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    if (ai.action === 'update_user' || ai.action === 'insert_user') {
+    if (WRITE_ACTIONS.includes(ai.action)) {
       const { error } = await supabase.rpc('exec_write_sql', { query: ai.sql })
+      console.log('Write error:', JSON.stringify(error))
       if (error) {
-        await sendTelegram(chatId, 'Maaf, gagal memproses permintaan. Pastikan data sudah benar.')
+        await sendTelegram(chatId, 'Maaf, gagal memproses permintaan. ' + (error.message || ''))
       } else {
         await sendTelegram(chatId, ai.reply || 'Berhasil diproses.')
       }
       return NextResponse.json({ ok: true })
     }
 
-  await sendTelegram(chatId, 'Maaf, saya tidak mengerti permintaan Anda.')
+    await sendTelegram(chatId, 'Maaf, saya tidak mengerti permintaan Anda.')
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('ERROR:', err)
