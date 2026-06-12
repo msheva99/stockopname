@@ -77,6 +77,8 @@ async function askOpenAI(userMessage: string, userContext: any) {
     }),
   })
   const data = await res.json()
+    console.log('OpenAI raw response:', JSON.stringify(data))
+
   const raw = data.choices?.[0]?.message?.content || '{}'
   const clean = raw.replace(/```json|```/g, '').trim()
   try {
@@ -130,6 +132,8 @@ export async function POST(req: NextRequest) {
     }
 
     const ai = await askOpenAI(text, userContext)
+        console.log('AI response:', JSON.stringify(ai))
+
 
     if (ai.action === 'info' || ai.action === 'unauthorized') {
       await sendTelegram(chatId, ai.reply || 'Maaf, saya tidak mengerti.')
