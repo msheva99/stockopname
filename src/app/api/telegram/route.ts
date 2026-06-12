@@ -13,7 +13,7 @@ async function sendTelegram(chatId: string | number, text: string) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    body: JSON.stringify({ chat_id: chatId, text }),
   })
   const data = await res.json()
   console.log('sendTelegram result:', JSON.stringify(data))
@@ -96,8 +96,18 @@ function formatQueryResult(rows: any[]): string {
   if (!flat || flat.length === 0) return 'Tidak ada data ditemukan.'
 
   return flat
-    .map((row: any) => Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(' | '))
-    .join('\n')
+    .map((row: any) => {
+      const name = row.name
+      const current = row.current_qty
+      const buffer = row.buffer_qty
+      const unit = row.unit || ''
+
+      if (name !== undefined && current !== undefined && buffer !== undefined) {
+        return `${name}\nStok sekarang: ${current} ${unit}\nMinimal stok: ${buffer} ${unit}`
+      }
+      return Object.entries(row).map(([k, v]) => `${k}: ${v}`).join(' | ')
+    })
+    .join('\n\n')
 }
 
 export async function POST(req: NextRequest) {
