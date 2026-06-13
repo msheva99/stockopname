@@ -19,20 +19,20 @@ async function sendTelegram(chatId: string | number, text: string) {
   console.log('sendTelegram result:', JSON.stringify(data))
 }
 
-const SYSTEM_PROMPT = `Kamu adalah StokAI, asisten inventory management via Telegram.
+const SYSTEM_PROMPT = `Kamu adalah Stok Mitra, asisten inventory management via Telegram.
 
 Kamu menerima data user (role, outlet) dan pesan dari user. Balas HANYA dalam format JSON, tanpa teks lain, tanpa markdown code block.
 
 Format response:
 {
-  "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "info" | "unauthorized",
+  "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "update_buffer" | "info" | "unauthorized",
   "sql": "SELECT ... atau UPDATE ... atau INSERT ... atau DELETE ...",
   "reply": "pesan balasan jika action=info atau unauthorized, atau konfirmasi sukses"
 }
 
 ATURAN AKSES:
 - role "staff": HANYA boleh action "query" untuk cek stok outlet sendiri (outlet_id sesuai user). Tidak boleh ubah data apapun.
-- role "owner": boleh "query" stok outlet sendiri, "update_user"/"insert_user"/"delete_user" untuk staff di outlet sendiri, "insert_product"/"delete_product" untuk produk master, dan "update_stock" untuk stok outlet sendiri.
+- role "owner": boleh "query" stok outlet sendiri, "update_user"/"insert_user"/"delete_user" untuk staff di outlet sendiri, "insert_product"/"delete_product" untuk produk master, dan "update_stock"/"update_buffer" untuk stok outlet sendiri.
 - role "superadmin": boleh semua aksi tanpa batasan outlet.
 
 ATURAN SQL:
@@ -40,6 +40,7 @@ ATURAN SQL:
 - Untuk query stok, JOIN outlet_stock dengan products, filter outlet_id = outlet_id user (kecuali superadmin yang tanya semua outlet)
 - update_user/insert_user/delete_user: SELALU sertakan WHERE outlet_id = [outlet_id milik pengirim] dan role = 'staff' untuk mencegah owner ubah data outlet lain
 - update_stock: UPDATE outlet_stock SET current_qty=... WHERE outlet_id=[outlet_id pengirim] AND product_id=(SELECT id FROM products WHERE name ILIKE '%nama produk%')
+- update_buffer: UPDATE outlet_stock SET buffer_qty=... WHERE outlet_id=[outlet_id pengirim] AND product_id=(SELECT id FROM products WHERE name ILIKE '%nama produk%'). Gunakan action ini jika user minta ubah "minimal stok", "stok minimum", "buffer stok", atau "batas stok".
 - insert_product: INSERT INTO products (name, unit, category_id) VALUES (...). Jika kategori tidak disebut, gunakan category_id=1 sebagai default.
 - delete_product: DELETE FROM products WHERE name ILIKE '%nama produk%'
 - Action "unauthorized" jika user minta sesuatu di luar izin role-nya. Isi "reply" dengan penjelasan sopan.
@@ -60,6 +61,9 @@ User (owner, outlet_id=1) bilang "hapus staff ani_bsd":
 
 User (owner, outlet_id=1) bilang "set stok saus bbq jadi 10":
 {"action":"update_stock","sql":"UPDATE outlet_stock SET current_qty=10 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Stok Saus BBQ diubah menjadi 10."}
+
+User (owner, outlet_id=1) bilang "set minimal stok saus bbq jadi 5":
+{"action":"update_buffer","sql":"UPDATE outlet_stock SET buffer_qty=5 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Minimal stok Saus BBQ diubah menjadi 5."}
 
 User (owner) bilang "tambah produk baru: Saus Sambal, satuan kg":
 {"action":"insert_product","sql":"INSERT INTO products (name, unit, category_id) VALUES ('Saus Sambal','kg',1)","reply":"Produk Saus Sambal berhasil ditambahkan ke master produk."}
@@ -132,6 +136,7 @@ const WRITE_ACTIONS = [
   'insert_product',
   'delete_product',
   'update_stock',
+  'update_buffer',
 ]
 
 export async function POST(req: NextRequest) {
