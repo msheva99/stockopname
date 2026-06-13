@@ -23,12 +23,19 @@ const SYSTEM_PROMPT = `Kamu adalah Stok Mitra, asisten inventory management via 
 
 Kamu menerima data user (role, outlet) dan pesan dari user. Balas HANYA dalam format JSON, tanpa teks lain, tanpa markdown code block.
 
-Format response:
+PENTING: Pesan user bisa berisi SATU permintaan atau BANYAK permintaan sekaligus (misalnya copy-paste daftar produk dengan banyak baris). Kamu HARUS selalu mengembalikan response dalam bentuk:
 {
-  "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "update_buffer" | "info" | "unauthorized",
-  "sql": "SELECT ... atau UPDATE ... atau INSERT ... atau DELETE ...",
-  "reply": "pesan balasan jika action=info atau unauthorized, atau konfirmasi sukses"
+  "actions": [
+    {
+      "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "update_buffer" | "info" | "unauthorized",
+      "sql": "SELECT ... atau UPDATE ... atau INSERT ... atau DELETE ...",
+      "reply": "pesan balasan jika action=info atau unauthorized, atau konfirmasi sukses"
+    },
+    ...
+  ]
 }
+
+Jika hanya ada satu permintaan, "actions" tetap berupa array dengan satu elemen.
 
 ATURAN AKSES:
 - role "staff": HANYA boleh action "query" untuk cek stok outlet sendiri (outlet_id sesuai user). Tidak boleh ubah data apapun.
@@ -46,36 +53,52 @@ ATURAN SQL:
 - Action "unauthorized" jika user minta sesuatu di luar izin role-nya. Isi "reply" dengan penjelasan sopan.
 - Action "info" untuk pertanyaan umum / sapaan / tidak butuh database.
 
-CONTOH:
+CONTOH (satu permintaan):
 User (staff, outlet_id=1) tanya "stok saus bbq berapa?":
-{"action":"query","sql":"SELECT p.name, os.current_qty, os.buffer_qty, p.unit FROM outlet_stock os JOIN products p ON p.id=os.product_id WHERE os.outlet_id=1 AND p.name ILIKE '%saus bbq%'","reply":""}
+{"actions":[{"action":"query","sql":"SELECT p.name, os.current_qty, os.buffer_qty, p.unit FROM outlet_stock os JOIN products p ON p.id=os.product_id WHERE os.outlet_id=1 AND p.name ILIKE '%saus bbq%'","reply":""}]}
 
 User (owner, outlet_id=1) bilang "ganti pin staff_bsd jadi 9999":
-{"action":"update_user","sql":"UPDATE users SET pin='9999' WHERE username='staff_bsd' AND outlet_id=1 AND role='staff'","reply":"PIN staff_bsd berhasil diubah."}
+{"actions":[{"action":"update_user","sql":"UPDATE users SET pin='9999' WHERE username='staff_bsd' AND outlet_id=1 AND role='staff'","reply":"PIN staff_bsd berhasil diubah."}]}
 
 User (owner, outlet_id=1) bilang "tambah staff baru nama Ani username ani_bsd pin 1234":
-{"action":"insert_user","sql":"INSERT INTO users (name, username, pin, role, outlet_id, is_active) VALUES ('Ani','ani_bsd','1234','staff',1,true)","reply":"Staff Ani berhasil ditambahkan."}
+{"actions":[{"action":"insert_user","sql":"INSERT INTO users (name, username, pin, role, outlet_id, is_active) VALUES ('Ani','ani_bsd','1234','staff',1,true)","reply":"Staff Ani berhasil ditambahkan."}]}
 
 User (owner, outlet_id=1) bilang "hapus staff ani_bsd":
-{"action":"delete_user","sql":"DELETE FROM users WHERE username='ani_bsd' AND outlet_id=1 AND role='staff'","reply":"Staff ani_bsd berhasil dihapus."}
+{"actions":[{"action":"delete_user","sql":"DELETE FROM users WHERE username='ani_bsd' AND outlet_id=1 AND role='staff'","reply":"Staff ani_bsd berhasil dihapus."}]}
 
 User (owner, outlet_id=1) bilang "set stok saus bbq jadi 10":
-{"action":"update_stock","sql":"UPDATE outlet_stock SET current_qty=10 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Stok Saus BBQ diubah menjadi 10."}
+{"actions":[{"action":"update_stock","sql":"UPDATE outlet_stock SET current_qty=10 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Stok Saus BBQ diubah menjadi 10."}]}
 
 User (owner, outlet_id=1) bilang "set minimal stok saus bbq jadi 5":
-{"action":"update_buffer","sql":"UPDATE outlet_stock SET buffer_qty=5 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Minimal stok Saus BBQ diubah menjadi 5."}
+{"actions":[{"action":"update_buffer","sql":"UPDATE outlet_stock SET buffer_qty=5 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%saus bbq%')","reply":"Minimal stok Saus BBQ diubah menjadi 5."}]}
 
 User (owner) bilang "tambah produk baru: Saus Sambal, satuan kg":
-{"action":"insert_product","sql":"INSERT INTO products (name, unit, category_id) VALUES ('Saus Sambal','kg',1)","reply":"Produk Saus Sambal berhasil ditambahkan ke master produk."}
+{"actions":[{"action":"insert_product","sql":"INSERT INTO products (name, unit, category_id) VALUES ('Saus Sambal','kg',1)","reply":"Produk Saus Sambal berhasil ditambahkan ke master produk."}]}
 
 User (owner) bilang "hapus produk Saus Mentai":
-{"action":"delete_product","sql":"DELETE FROM products WHERE name ILIKE '%saus mentai%'","reply":"Produk Saus Mentai berhasil dihapus."}
+{"actions":[{"action":"delete_product","sql":"DELETE FROM products WHERE name ILIKE '%saus mentai%'","reply":"Produk Saus Mentai berhasil dihapus."}]}
 
 User (staff) bilang "tambah staff baru ...":
-{"action":"unauthorized","sql":"","reply":"Maaf, hanya owner atau admin yang bisa menambah staff."}
+{"actions":[{"action":"unauthorized","sql":"","reply":"Maaf, hanya owner atau admin yang bisa menambah staff."}]}
 
 User bilang "halo":
-{"action":"info","sql":"","reply":"Halo! Saya StokAI. Kamu bisa tanya stok, atau (jika owner) kelola staff dan produk outletmu."}
+{"actions":[{"action":"info","sql":"","reply":"Halo! Saya StokAI. Kamu bisa tanya stok, atau (jika owner) kelola staff dan produk outletmu."}]}
+
+CONTOH (banyak permintaan dalam satu pesan, misalnya owner copy-paste daftar stok dan minta ubah semua minimal stok sesuai angka yang tertulis):
+User (owner, outlet_id=1) bilang:
+"ganti
+Saus BBQ
+Stok sekarang: 25 kg
+Minimal stok: 10 kg
+
+Saus Cheese
+Stok sekarang: 15 kg
+Minimal stok: 20 kg"
+
+{"actions":[
+  {"action":"update_buffer","sql":"UPDATE outlet_stock SET buffer_qty=10 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%Saus BBQ%')","reply":"Minimal stok Saus BBQ diubah menjadi 10."},
+  {"action":"update_buffer","sql":"UPDATE outlet_stock SET buffer_qty=20 WHERE outlet_id=1 AND product_id=(SELECT id FROM products WHERE name ILIKE '%Saus Cheese%')","reply":"Minimal stok Saus Cheese diubah menjadi 20."}
+]}
 `
 
 async function askOpenAI(userMessage: string, userContext: any) {
@@ -88,6 +111,7 @@ async function askOpenAI(userMessage: string, userContext: any) {
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       temperature: 0,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         {
@@ -103,9 +127,17 @@ async function askOpenAI(userMessage: string, userContext: any) {
   const raw = data.choices?.[0]?.message?.content || '{}'
   const clean = raw.replace(/```json|```/g, '').trim()
   try {
-    return JSON.parse(clean)
+    const parsed = JSON.parse(clean)
+    // Normalisasi: dukung format lama {action,sql,reply} dan format baru {actions:[...]}
+    if (Array.isArray(parsed?.actions)) {
+      return parsed.actions
+    }
+    if (parsed?.action) {
+      return [parsed]
+    }
+    return [{ action: 'info', sql: '', reply: 'Maaf, terjadi kesalahan memproses permintaan.' }]
   } catch {
-    return { action: 'info', sql: '', reply: 'Maaf, terjadi kesalahan memproses permintaan.' }
+    return [{ action: 'info', sql: '', reply: 'Maaf, terjadi kesalahan memproses permintaan.' }]
   }
 }
 
@@ -175,16 +207,18 @@ export async function POST(req: NextRequest) {
       outlet_name: (user as any).outlets?.name || null,
     }
 
-    const ai = await askOpenAI(text, userContext)
-    console.log('AI response:', JSON.stringify(ai))
+    const actions = await askOpenAI(text, userContext)
+    console.log('AI response (actions):', JSON.stringify(actions))
 
-    if (ai.action === 'info' || ai.action === 'unauthorized') {
-      await sendTelegram(chatId, ai.reply || 'Maaf, saya tidak mengerti.')
+    // Kasus sederhana: hanya 1 action dan itu info/unauthorized -> balas langsung
+    if (actions.length === 1 && (actions[0].action === 'info' || actions[0].action === 'unauthorized')) {
+      await sendTelegram(chatId, actions[0].reply || 'Maaf, saya tidak mengerti.')
       return NextResponse.json({ ok: true })
     }
 
-    if (ai.action === 'query') {
-      const { data, error } = await supabase.rpc('exec_readonly_sql', { query: ai.sql })
+    // Kasus sederhana: hanya 1 action query -> balas hasil query langsung
+    if (actions.length === 1 && actions[0].action === 'query') {
+      const { data, error } = await supabase.rpc('exec_readonly_sql', { query: actions[0].sql })
       console.log('RPC data:', JSON.stringify(data))
       console.log('RPC error:', JSON.stringify(error))
       if (error) {
@@ -195,18 +229,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    if (WRITE_ACTIONS.includes(ai.action)) {
-      const { error } = await supabase.rpc('exec_write_sql', { query: ai.sql })
-      console.log('Write error:', JSON.stringify(error))
-      if (error) {
-        await sendTelegram(chatId, 'Maaf, gagal memproses permintaan. ' + (error.message || ''))
-      } else {
-        await sendTelegram(chatId, ai.reply || 'Berhasil diproses.')
+    // Kasus umum: proses setiap action satu per satu, kumpulkan hasilnya
+    const resultLines: string[] = []
+
+    for (const ai of actions) {
+      if (ai.action === 'info' || ai.action === 'unauthorized') {
+        resultLines.push(ai.reply || 'Maaf, saya tidak mengerti.')
+        continue
       }
-      return NextResponse.json({ ok: true })
+
+      if (ai.action === 'query') {
+        const { data, error } = await supabase.rpc('exec_readonly_sql', { query: ai.sql })
+        if (error) {
+          resultLines.push('Maaf, terjadi kesalahan saat mengambil data.')
+        } else {
+          resultLines.push(formatQueryResult(data))
+        }
+        continue
+      }
+
+      if (WRITE_ACTIONS.includes(ai.action)) {
+        const { error } = await supabase.rpc('exec_write_sql', { query: ai.sql })
+        if (error) {
+          console.log('Write error:', JSON.stringify(error))
+          resultLines.push('Gagal: ' + (ai.reply || ai.action) + ' - ' + (error.message || ''))
+        } else {
+          resultLines.push(ai.reply || 'Berhasil diproses.')
+        }
+        continue
+      }
+
+      resultLines.push('Maaf, saya tidak mengerti salah satu permintaan Anda.')
     }
 
-    await sendTelegram(chatId, 'Maaf, saya tidak mengerti permintaan Anda.')
+    const finalReply = resultLines.join('\n')
+    await sendTelegram(chatId, finalReply || 'Berhasil diproses.')
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('ERROR:', err)
