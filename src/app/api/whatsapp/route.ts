@@ -174,9 +174,12 @@ const WRITE_ACTIONS = [
   'update_buffer',
 ]
 
-// Normalisasi nomor WA dari Wuzapi (biasanya format: 628xxxxxxxxx@s.whatsapp.net)
 function normalizePhone(raw: string): string {
-  return raw.replace('@s.whatsapp.net', '').replace(/\D/g, '')
+  return raw
+    .replace('@s.whatsapp.net', '')
+    .replace('@lid', '')
+    .replace(/:\d+$/, '') 
+    .replace(/\D/g, '')
 }
 
 export async function POST(req: NextRequest) {
