@@ -11,12 +11,11 @@ const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN!
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
 async function sendWhatsApp(phone: string, text: string) {
-  const url = `${WUZAPI_URL}/chat/send/text`
+  const url = `${WUZAPI_URL}/chat/send/text?token=${WUZAPI_TOKEN}`
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      token: WUZAPI_TOKEN,
     },
     body: JSON.stringify({
       Phone: phone,
