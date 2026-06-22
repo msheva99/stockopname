@@ -6,8 +6,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const WUZAPI_URL = process.env.WUZAPI_URL!       
-const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN!   
+const WUZAPI_URL = process.env.WUZAPI_URL || 'https://wuzapi.ibmpgroup.com'
+const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN || 'opname@2026'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
 async function sendWhatsApp(phone: string, text: string) {
