@@ -185,7 +185,8 @@ export async function POST(req: NextRequest) {
     console.log('Body received:', JSON.stringify(body))
 
     const event = body?.event
-    const senderRaw = event?.Info?.Sender || body?.from
+    const senderRaw = event?.Info?.SenderAlt || event?.Info?.Sender || body?.from
+
     const textRaw =
       event?.Message?.conversation ||
       event?.Message?.extendedTextMessage?.text ||
