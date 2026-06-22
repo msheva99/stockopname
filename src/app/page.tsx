@@ -19,7 +19,7 @@ export default function LoginPage() {
     try {
       const { data, error: dbError } = await supabase
         .from('users')
-        .select('*, outlets(name)')
+        .select('*, outlets(name, brand_id)')
         .eq('username', username.trim().toLowerCase())
         .eq('pin', pin)
         .eq('is_active', true)
@@ -37,6 +37,7 @@ export default function LoginPage() {
         role: data.role,
         outlet_id: data.outlet_id,
         outlet_name: data.outlets?.name,
+        brand_id: data.outlets?.brand_id,
         is_active: data.is_active,
       }
 

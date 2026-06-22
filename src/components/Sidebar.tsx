@@ -94,7 +94,7 @@ export default function Sidebar() {
         >
           Keluar
         </button>
-      </div>\
+      </div>
     </div>
   )
 }

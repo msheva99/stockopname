@@ -40,10 +40,16 @@ export default function ProdukPage() {
   })
 
   const loadData = useCallback(async (u: User) => {
-    const { data: prodData } = await supabase
+    let query = supabase
       .from('products')
       .select('id, name, unit, categories(name)')
       .order('name')
+
+    if (u.brand_id) {
+      query = query.eq('brand_id', u.brand_id)
+    }
+
+    const { data: prodData } = await query
 
     if (prodData) {
       setProducts(prodData.map((p: any) => ({

@@ -6,23 +6,29 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const BOT_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN!
+const WUZAPI_URL = process.env.WUZAPI_URL!       
+const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN!   
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
-async function sendTelegram(chatId: string | number, text: string) {
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+async function sendWhatsApp(phone: string, text: string) {
+  const url = `${WUZAPI_URL}/chat/send/text`
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    headers: {
+      'Content-Type': 'application/json',
+      token: WUZAPI_TOKEN,
+    },
+    body: JSON.stringify({
+      Phone: phone,
+      Body: text,
+    }),
   })
-  const data = await res.json()
-  console.log('sendTelegram result:', JSON.stringify(data))
+  const data = await res.json().catch(() => ({}))
+  console.log('sendWhatsApp result:', JSON.stringify(data))
 }
 
-const SYSTEM_PROMPT = `Kamu adalah Stok Mitra, asisten inventory management via Telegram.
-
+const SYSTEM_PROMPT = `Kamu adalah Stok Mitra, asisten inventory management via WhatsApp.
 Kamu menerima data user (role, outlet) dan pesan dari user. Balas HANYA dalam format JSON, tanpa teks lain, tanpa markdown code block.
-
 PENTING: Pesan user bisa berisi SATU permintaan atau BANYAK permintaan sekaligus (misalnya copy-paste daftar produk dengan banyak baris). Kamu HARUS selalu mengembalikan response dalam bentuk:
 {
   "actions": [
@@ -30,8 +36,7 @@ PENTING: Pesan user bisa berisi SATU permintaan atau BANYAK permintaan sekaligus
       "action": "query" | "update_user" | "insert_user" | "delete_user" | "insert_product" | "delete_product" | "update_stock" | "update_buffer" | "info" | "unauthorized",
       "sql": "SELECT ... atau UPDATE ... atau INSERT ... atau DELETE ...",
       "reply": "pesan balasan jika action=info atau unauthorized, atau konfirmasi sukses"
-    },
-    ...
+    }
   ]
 }
 
@@ -43,7 +48,7 @@ ATURAN AKSES:
 - role "superadmin": boleh semua aksi tanpa batasan outlet.
 
 ATURAN SQL:
-- Tabel: users (id, name, username, pin, telegram_id, role, outlet_id, is_active), outlets (id, name, address), outlet_stock (outlet_id, product_id, current_qty, buffer_qty), products (id, name, unit, category_id), categories (id, name)
+- Tabel: users (id, name, username, pin, phone, role, outlet_id, is_active), outlets (id, name, address, brand_id), outlet_stock (outlet_id, product_id, current_qty, buffer_qty), products (id, name, unit, category_id, brand_id), categories (id, name)
 - Untuk query stok, JOIN outlet_stock dengan products, filter outlet_id = outlet_id user (kecuali superadmin yang tanya semua outlet)
 - update_user/insert_user/delete_user: SELALU sertakan WHERE outlet_id = [outlet_id milik pengirim] dan role = 'staff' untuk mencegah owner ubah data outlet lain
 - update_stock: UPDATE outlet_stock SET current_qty=... WHERE outlet_id=[outlet_id pengirim] AND product_id=(SELECT id FROM products WHERE name ILIKE '%nama produk%')
@@ -82,9 +87,9 @@ User (staff) bilang "tambah staff baru ...":
 {"actions":[{"action":"unauthorized","sql":"","reply":"Maaf, hanya owner atau admin yang bisa menambah staff."}]}
 
 User bilang "halo":
-{"actions":[{"action":"info","sql":"","reply":"Halo! Saya StokAI. Kamu bisa tanya stok, atau (jika owner) kelola staff dan produk outletmu."}]}
+{"actions":[{"action":"info","sql":"","reply":"Halo! Saya Stok Mitra. Kamu bisa tanya stok, atau (jika owner) kelola staff dan produk outletmu."}]}
 
-CONTOH (banyak permintaan dalam satu pesan, misalnya owner copy-paste daftar stok dan minta ubah semua minimal stok sesuai angka yang tertulis):
+CONTOH (banyak permintaan dalam satu pesan):
 User (owner, outlet_id=1) bilang:
 "ganti
 Saus BBQ
@@ -128,7 +133,6 @@ async function askOpenAI(userMessage: string, userContext: any) {
   const clean = raw.replace(/```json|```/g, '').trim()
   try {
     const parsed = JSON.parse(clean)
-    // Normalisasi: dukung format lama {action,sql,reply} dan format baru {actions:[...]}
     if (Array.isArray(parsed?.actions)) {
       return parsed.actions
     }
@@ -171,32 +175,43 @@ const WRITE_ACTIONS = [
   'update_buffer',
 ]
 
+// Normalisasi nomor WA dari Wuzapi (biasanya format: 628xxxxxxxxx@s.whatsapp.net)
+function normalizePhone(raw: string): string {
+  return raw.replace('@s.whatsapp.net', '').replace(/\D/g, '')
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     console.log('Body received:', JSON.stringify(body))
-    const message = body?.message
-    if (!message?.text) {
-      console.log('No message text, skipping')
+
+    const event = body?.event
+    const senderRaw = event?.Info?.Sender || body?.from
+    const textRaw =
+      event?.Message?.conversation ||
+      event?.Message?.extendedTextMessage?.text ||
+      body?.text
+
+    if (!senderRaw || !textRaw) {
+      console.log('No valid message, skipping')
       return NextResponse.json({ ok: true })
     }
 
-    const chatId = message.chat.id
-    const telegramId = message.from.id.toString()
-    const text = message.text.trim()
+    const phone = normalizePhone(senderRaw)
+    const text = textRaw.trim()
 
     const { data: user } = await supabase
       .from('users')
       .select('id, name, username, role, outlet_id, outlets(name)')
-      .eq('telegram_id', telegramId)
+      .eq('phone', phone)
       .eq('is_active', true)
       .single()
 
     console.log('User found:', JSON.stringify(user))
 
     if (!user) {
-      console.log('User not found for telegramId:', telegramId)
-      await sendTelegram(chatId, 'Maaf, akun Telegram Anda belum terdaftar di sistem. Hubungi admin perusahaan.')
+      console.log('User not found for phone:', phone)
+      await sendWhatsApp(phone, 'Maaf, nomor Anda belum terdaftar di sistem. Hubungi admin perusahaan.')
       return NextResponse.json({ ok: true })
     }
 
@@ -210,21 +225,19 @@ export async function POST(req: NextRequest) {
     const actions = await askOpenAI(text, userContext)
     console.log('AI response (actions):', JSON.stringify(actions))
 
-    // Kasus sederhana: hanya 1 action dan itu info/unauthorized -> balas langsung
     if (actions.length === 1 && (actions[0].action === 'info' || actions[0].action === 'unauthorized')) {
-      await sendTelegram(chatId, actions[0].reply || 'Maaf, saya tidak mengerti.')
+      await sendWhatsApp(phone, actions[0].reply || 'Maaf, saya tidak mengerti.')
       return NextResponse.json({ ok: true })
     }
 
-    // Kasus sederhana: hanya 1 action query -> balas hasil query langsung
     if (actions.length === 1 && actions[0].action === 'query') {
       const { data, error } = await supabase.rpc('exec_readonly_sql', { query: actions[0].sql })
       console.log('RPC data:', JSON.stringify(data))
       console.log('RPC error:', JSON.stringify(error))
       if (error) {
-        await sendTelegram(chatId, 'Maaf, terjadi kesalahan saat mengambil data.')
+        await sendWhatsApp(phone, 'Maaf, terjadi kesalahan saat mengambil data.')
       } else {
-        await sendTelegram(chatId, formatQueryResult(data))
+        await sendWhatsApp(phone, formatQueryResult(data))
       }
       return NextResponse.json({ ok: true })
     }
@@ -262,7 +275,7 @@ export async function POST(req: NextRequest) {
     }
 
     const finalReply = resultLines.join('\n')
-    await sendTelegram(chatId, finalReply || 'Berhasil diproses.')
+    await sendWhatsApp(phone, finalReply || 'Berhasil diproses.')
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('ERROR:', err)

@@ -13,6 +13,7 @@ export interface User {
   role: UserRole
   outlet_id: number | null
   outlet_name?: string
+  brand_id?: string | null
   is_active: boolean
 }
 
