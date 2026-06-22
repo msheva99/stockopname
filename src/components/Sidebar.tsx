@@ -40,7 +40,7 @@ export default function Sidebar() {
 
       {/* Logo */}
       <div style={{ padding: '0 20px 32px' }}>
-        <p style={{ color: 'white', fontSize: '18px', fontWeight: '700', margin: 0 }}>Stok Mitra</p>
+        <p style={{ color: 'white', fontSize: '18px', fontWeight: '700', margin: 0 }}>Stok</p>
       </div>
 
       {/* Menu */}

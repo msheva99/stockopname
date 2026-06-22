@@ -6,8 +6,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const WUZAPI_URL = process.env.WUZAPI_URL || 'https://wuzapi.ibmpgroup.com'
-const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN || 'opname@2026'
+const WUZAPI_URL = process.env.WUZAPI_URL!
+const WUZAPI_TOKEN = process.env.WUZAPI_TOKEN!
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
 
 async function sendWhatsApp(phone: string, text: string) {
@@ -26,7 +26,7 @@ async function sendWhatsApp(phone: string, text: string) {
   console.log('sendWhatsApp result:', JSON.stringify(data))
 }
 
-const SYSTEM_PROMPT = `Kamu adalah Stok Mitra, asisten inventory management via WhatsApp.
+const SYSTEM_PROMPT = `Kamu adalah Agent AI Stock, asisten inventory management via WhatsApp.
 Kamu menerima data user (role, outlet) dan pesan dari user. Balas HANYA dalam format JSON, tanpa teks lain, tanpa markdown code block.
 PENTING: Pesan user bisa berisi SATU permintaan atau BANYAK permintaan sekaligus (misalnya copy-paste daftar produk dengan banyak baris). Kamu HARUS selalu mengembalikan response dalam bentuk:
 {
