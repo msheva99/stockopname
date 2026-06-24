@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 const menus = [
   { label: 'Stock Barang', path: '/opname' },
   { label: 'Produk', path: '/produk' },
+  { label: 'Sync Kasir', path: '/sync' },
 ]
 
 export default function Sidebar() {
