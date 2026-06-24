@@ -34,10 +34,6 @@ export async function POST(req: NextRequest) {
       for (const recipe of recipes) {
         const totalUsed = recipe.quantity * qty
 
-        const { error } = await supabase.rpc('exec_write_sql', {
-          query: `UPDATE outlet_stock SET current_qty = GREATEST(0, current_qty - ${totalUsed}) WHERE outlet_id = ${OUTLET_ID} AND product_id = ${recipe.product_id}`
-        })
-
         if (error) {
           logs.push(`${menuName} - product_id ${recipe.product_id}: ${error.message}`)
         }
