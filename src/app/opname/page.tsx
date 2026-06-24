@@ -9,6 +9,7 @@ interface StockItem {
   product_id: number
   product_name: string
   unit: string
+  pack_size: number
   system_qty: number
   buffer_qty: number
   physical_qty: number
@@ -30,7 +31,7 @@ export default function OpnamePage() {
   const loadStock = useCallback(async (outletId: number) => {
     const { data, error } = await supabase
       .from('outlet_stock')
-      .select('id, product_id, current_qty, buffer_qty, products(name, unit)')
+      .select('id, product_id, current_qty, buffer_qty, products(name, unit, pack_size)')
       .eq('outlet_id', outletId)
 
     if (error || !data) return
@@ -40,6 +41,7 @@ export default function OpnamePage() {
       product_id: row.product_id,
       product_name: row.products.name,
       unit: row.products.unit,
+      pack_size: row.products.pack_size ?? 1,
       system_qty: row.current_qty,
       buffer_qty: row.buffer_qty,
       physical_qty: row.current_qty,
@@ -119,7 +121,6 @@ export default function OpnamePage() {
         }
       }
 
-      // Kirim notif ke Telegram
       await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -302,6 +303,9 @@ function ProductRow({
   critical?: boolean
 }) {
   const diff = item.physical_qty - item.system_qty
+  const packSize = item.pack_size ?? 1
+  const systemPack = (item.system_qty / packSize).toFixed(1)
+  const bufferPack = (item.buffer_qty / packSize).toFixed(1)
 
   return (
     <div style={{
@@ -315,7 +319,7 @@ function ProductRow({
           {item.product_name}
         </p>
         <p style={{ fontSize: '11px', color: critical ? 'var(--color-warning)' : '#888', margin: 0 }}>
-          Stok: {item.system_qty} · Minimal: {item.buffer_qty}
+          Stok: {item.system_qty} {item.unit} ({systemPack} pack) · Minimal: {item.buffer_qty} {item.unit} ({bufferPack} pack)
         </p>
       </div>
 
