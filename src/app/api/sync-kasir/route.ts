@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
 
       if (!menuName || !qty) continue
 
-      // Lookup recipes untuk menu ini
       const { data: recipes } = await supabase
         .from('recipes')
         .select('product_id, quantity, unit')
@@ -30,12 +29,15 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      // Update stok per bahan
       for (const recipe of recipes) {
         const totalUsed = recipe.quantity * qty
 
-        if (error) {
-          logs.push(`${menuName} - product_id ${recipe.product_id}: ${error.message}`)
+        const { error: updateError } = await supabase.rpc('exec_write_sql', {
+          query: `UPDATE outlet_stock SET current_qty = current_qty - ${totalUsed} WHERE outlet_id = ${OUTLET_ID} AND product_id = ${recipe.product_id}`
+        })
+
+        if (updateError) {
+          logs.push(`${menuName} - product_id ${recipe.product_id}: ${updateError.message}`)
         }
       }
 
